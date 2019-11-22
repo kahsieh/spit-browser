@@ -1,6 +1,9 @@
-# Stream Processing in the Browser
+# SPIT-Browser
 
-Kevin Hsieh (kevin.hsieh@ucla.edu)  
-Christian Warloe (cwarloe@ucla.edu)  
-Willie Wu (williewu@ucla.edu)  
-CS 239, Fall 2019
+Stream Processing in the Browser
+
+Written by:
+
+- Kevin Hsieh (kevin.hsieh@ucla.edu)
+- Christian Warloe (cwarloe@ucla.edu)
+- Willie Wu (williewu@ucla.edu)
