@@ -12,5 +12,5 @@ Written by:
 
 Running on Windows:
 
-- Development mode: `scheduler\run`
-- Production mode: `scheduler\run prod`
+- Development mode: `cd scheduler && run`
+- Production mode: `cd scheduler && run prod`
