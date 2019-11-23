@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
 """
-SPIT-Browser Scheduler
-Worker Library
+Worker Management Library for SPIT-Browser Scheduler
 """
 
 from typing import List
