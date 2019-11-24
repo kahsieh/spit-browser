@@ -4,27 +4,44 @@
 Worker Management Library for SPIT-Browser Scheduler
 """
 
-from typing import List
+from typing import Any, Dict, List
 
-class Worker:
-  def __init__(self, address: str, n_cores: int):
-    self._address: str = address
-    self._n_cores: int = n_cores
-    self._n_active: int = 0
-    self._pending: List[str] = []
+class Task(dict):
+  def __init__(self, job_id: int, task_id: int, worker_id: int, program: str):
+    self['job_id'] = job_id  # int
+    self['task_id'] = task_id  # int
+    self['worker_id'] = worker_id  # int
+    self['program'] = program  # str
+    self['sinks'] = []  # List[TaskReference]
 
-  def address(self) -> str:
-    return self._address
 
-  def usage(self) -> float:
-    return (self._n_active + len(self._pending)) / self._n_cores
+class TaskReference(dict):
+  def __init__(self, task: Task, workers: List['Worker']):
+    self['job_id'] = task['job_id']  # int
+    self['task_id'] = task['task_id']  # int
+    self['worker_id'] = task['worker_id']  # int
+    self['worker_address'] = workers[task['worker_id']]['address']  # str
 
-  def push(self, task: str) -> None:
-    self._pending.append(task)
 
-  def heartbeat(self, n_active: int) -> List[str]:
-    n_send: int = min(self._n_cores - n_active, len(self._pending))
-    tasks: List[str] = self._pending[:n_send]
-    self._n_active = n_active + n_send
-    self._pending = self._pending[n_send:]
-    return tasks
+class Job(dict):
+  def __init__(self, job_id: int, tasks: List[Task]):
+    self['job_id'] = job_id  # int
+    self['tasks'] = tasks  # List[Task]
+
+
+class Worker(dict):
+  def __init__(self, worker_id: int, n_cores: int, address: str):
+    self['worker_id'] = worker_id  # int
+    self['n_cores'] = n_cores  # int
+    self['address'] = address  # int
+    self['active_tasks'] = []  # List[Union[TaskReference, Task]]
+    self['pending_tasks'] = []  # List[Task]
+
+  def availability(self) -> int:
+    return self['n_cores'] - len(self['active_tasks']) - len(self['pending_tasks'])
+
+  def heartbeat(self, active_tasks: List[TaskReference]) -> List[Task]:
+    n_send: int = self['n_cores'] - len(active_tasks)
+    self['active_tasks'] = active_tasks + self['pending_tasks'][:n_send]
+    self['pending_tasks'] = self['pending_tasks'][n_send:]
+    return self['active_tasks'][:n_send]
