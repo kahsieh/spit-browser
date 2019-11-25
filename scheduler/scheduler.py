@@ -4,46 +4,74 @@
 SPIT-Browser Scheduler
 """
 
+from flask import Flask, jsonify, request, Response
+from threading import Lock
 from typing import Any, Dict, List, Tuple
-from flask import Flask
-from flask import jsonify
-from flask import request
-from flask import Response
-from worker import Worker
+from task import *
 
 app: Flask = Flask(__name__)
+jobs: List[Job] = []
+jobs_lock: Lock = Lock()
 workers: List[Worker] = []
+workers_lock: Lock = Lock()
+
+@app.route('/')
+def root() -> Response:
+  """
+  Returns the state of the scheduler.
+
+  Returns:
+    jobs (List[Job]): All jobs sent via /allocate.
+    workers (List[Worker]): All workers registered via /register.
+  """
+  return jsonify({
+    'jobs': jobs,
+    'workers': workers,
+  })
+
 
 @app.route('/register', methods=['POST'])
 def register() -> Response:
   """
+  Registers a worker.
+
   Args:
-    n_cores (int): Number of cores that the worker has available.
+    n_cores (int): Number of cores on the worker.
 
   Returns:
-    id (int): ID assigned to the worker.
+    worker_id (int): ID assigned to the worker.
   """
   req: Dict[str, Any] = request.get_json(force=True)
-  address: str = request.environ['REMOTE_ADDR'] + ':' + str(request.environ['REMOTE_PORT'])
-  workers.append(Worker(address, req['n_cores']))
+
+  # Construct new Worker.
+  workers_lock.acquire()
+  worker_id: int = len(workers)
+  n_cores: int = req['n_cores']
+  address: str = request.environ['REMOTE_ADDR'] + ':' +\
+                 str(request.environ['REMOTE_PORT'])
+  workers.append(Worker(worker_id, n_cores, address))
+  workers_lock.release()
+
   return jsonify({
-    'id': len(workers) - 1,
+    'worker_id': worker_id,
   })
 
 
 @app.route('/heartbeat', methods=['POST'])
 def heartbeat() -> Response:
   """
+  Processes a heartbeat from a worker.
+
   Args:
-    id (int): Worker's ID.
-    n_active (int): Number of active tasks on the worker.
+    worker_id (int): ID assigned to the worker.
+    active_tasks (List[TaskPointer]): List of still-running tasks.
 
   Returns:
-    tasks (List[str]): A list of new programs for the worker to run.
+    new_tasks (List[Task]): List of new tasks for the worker to run.
   """
   req: Dict[str, Any] = request.get_json(force=True)
   return jsonify({
-    'tasks': workers[req['id']].heartbeat(req['n_active']),
+    'new_tasks': workers[req['worker_id']].heartbeat(req['active_tasks']),
   })
 
 
@@ -51,18 +79,41 @@ def heartbeat() -> Response:
 def allocate() -> Response:
   """
   Args:
-    tasks (List[str]): A list of new programs to be assigned to workers.
+    new_tasks (List[NewTask]): Ordered list of tasks to allocate resource for,
+      where each NewTask contains the keys 'program' (str) and 'sinks'
+      (List[int]).
 
   Returns:
-    nodes (List[Tuple[int, str]]): List of pairs, each of which contains the ID
-      and address of a worker that the respective program will be sent to.
+    task_pointers (List[TaskPointers]): TaskPointers to each allocation, in the
+      same order as the input.
   """
   req: Dict[str, Any] = request.get_json(force=True)
-  nodes: List[Tuple[int, str]] = []
-  for i, worker in enumerate(workers):
-    while req['tasks'] and worker.usage() < 1:
-      worker.push(req['tasks'].pop(0))
-      nodes.append((i, worker.address()))
+  client_address: str = request.environ['REMOTE_ADDR'] + ':' +\
+                        str(request.environ['REMOTE_PORT'])
+
+  # Construct new Job.
+  jobs_lock.acquire()
+  job_id: int = len(jobs)
+  jobs.append(Job(job_id, []))
+  tasks = jobs[-1]['tasks']
+  jobs_lock.release()
+
+  # Allocate new tasks.
+  task_id: int = 0
+  for worker in workers:
+    while task_id < len(req['new_tasks']) and worker.availability() > 0:
+      worker_id: int = worker['worker_id']
+      program: str = req['new_tasks'][task_id]['program']
+      task: Task = Task(job_id, task_id, worker_id, client_address, program, [])
+      worker['pending_tasks'].append(task)
+      tasks.append(task)
+      task_id += 1
+  
+  # Update sink lists.
+  for i, task in enumerate(tasks):
+    task['sinks'] = [TaskPointer(tasks[sink_id], workers)
+                     for sink_id in req['new_tasks'][i]['sinks']]
+
   return jsonify({
-    'nodes': nodes,
+    'task_pointers': [TaskPointer(task, workers) for task in tasks],
   })
