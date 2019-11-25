@@ -78,8 +78,10 @@ def heartbeat() -> Response:
 @app.route('/allocate', methods=['POST'])
 def allocate() -> Response:
   """
+  Allocates workers for a new job.
+
   Args:
-    new_tasks (List[NewTask]): Ordered list of tasks to allocate resource for,
+    new_tasks (List[NewTask]): Ordered list of tasks to allocate resources for,
       where each NewTask contains the keys 'program' (str) and 'sinks'
       (List[int]).
 
