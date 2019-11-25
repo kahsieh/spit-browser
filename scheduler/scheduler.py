@@ -82,7 +82,7 @@ def allocate() -> Response:
 
   Args:
     new_tasks (List[NewTask]): Ordered list of tasks to allocate resources for,
-      where each NewTask contains the keys 'program' (str) and 'sinks'
+      where each NewTask contains the keys 'program' (str) and 'contacts'
       (List[int]).
 
   Returns:
@@ -111,10 +111,10 @@ def allocate() -> Response:
       tasks.append(task)
       task_id += 1
   
-  # Update sink lists.
+  # Update contact lists.
   for i, task in enumerate(tasks):
-    task['sinks'] = [TaskPointer(tasks[sink_id], workers)
-                     for sink_id in req['new_tasks'][i]['sinks']]
+    task['contacts'] = [TaskPointer(tasks[contact_id], workers)
+                        for contact_id in req['new_tasks'][i]['contacts']]
 
   return jsonify({
     'task_pointers': [TaskPointer(task, workers) for task in tasks],

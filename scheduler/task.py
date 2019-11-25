@@ -17,16 +17,17 @@ class Task(dict):
     worker_id (int): Worker to which this task is assigned.
     client_address (str): Address of requesting client.
     program (str): JavaScript program for this task.
-    sinks (List[TaskPointer]): TaskPointers for this task's outgoing edges.
+    contacts (List[TaskPointer]): TaskPointers for this task's contacts.
   """
   def __init__(self, job_id: int, task_id: int, worker_id: int,
-               client_address: str, program: str, sinks: List['TaskPointer']):
+               client_address: str, program: str,
+               contacts: List['TaskPointer']):
     self['job_id'] = job_id
     self['task_id'] = task_id
     self['worker_id'] = worker_id
     self['client_address'] = client_address
     self['program'] = program
-    self['sinks'] = sinks
+    self['contacts'] = contacts
 
 
 class TaskPointer(dict):
