@@ -23,8 +23,15 @@ scheduler_url = "http://127.0.0.1:5000/allocate"
 IP = '127.0.0.1'
 PORT = 8888
 
-def parse_graph(graph_file):
-  return 1
+def create_payload(graph_file, folder):
+  payload = {'new_tasks': []}
+  with open(graph_file, 'r') as file:
+    for line in file:
+      items = line.split()
+      file_path = os.path.join(folder, items[0])
+      with open(file_path, 'r') as js_file:
+        payload['new_tasks'].append({'program': js_file.read(), 'sinks':[int(i) for i in items[1:]]})
+  return payload
 
 def wait_for_answers(ip, port):
   async def tcp_answer_client():
@@ -72,30 +79,17 @@ if __name__ == '__main__':
   #Parsing CL arguments
   parser = argparse.ArgumentParser()
   parser.add_argument("--folder", type=str, help="Directory of .js files")
-  parser.add_argument("--workers", type=int, help="number of workers needed")
+  #parser.add_argument("--workers", type=int, help="number of workers needed")
   parser.add_argument("--graph", type=str, help="graph_file")
   FLAGS = parser.parse_args()
   folder = FLAGS.folder
-  num_workers = FLAGS.workers
+  #num_workers = FLAGS.workers
   graph_file = FLAGS.graph
 
-  #extracting graph from graph file
-  graph = parse_graph(graph_file)
-
-  #creating initial request to scheduler
-  file_list = os.listdir(folder)
-  file_paths = [os.path.join(folder, filename)\
-              for filename in file_list]
-  multipart_form_data =[('files', open(file_paths[num], 'rb'))\
-                          for num in range(len(file_paths))]
-  multipart_form_data.append(('num_workers',num_workers))
-  multipart_form_data.append(('num_files',len(file_list)))
-  multipart_form_data.append(('graph',graph))
-  #{'new_tasks': [{'program': <file_contents>, 'sinks': [1]}, {'program': <file_contents>, 'sinks': []}]}
-  #making request
-  response = requests.post(scheduler_url, files=multipart_form_data)
-  #response = requests.post(scheduler_url, data={'num_workers':2})
-  print(response)
+  #making request payload
+  payload = create_payload(graph_file, folder)
+  print(payload)
+  response = requests.post(scheduler_url, json=payload)
   if response.status_code != 200:
     print('Failure Error Code: {}'.format(response.status_code))
     print('Exiting please try again')
@@ -104,8 +98,8 @@ if __name__ == '__main__':
   #successful response start client and server to start streaming data and
   #waiting for answers.
   info = response.json()
-  print(info)
-  end_ip = info['ip']
-  end_port = info['port']
+  ip_port = info['task_pointers'][-1]['worker_address']
+  end_ip = ip_port.split(':')[0]
+  end_port = int(ip_port.split(':')[1])
   p = Process(target=wait_for_answers, args=(end_ip, end_port))
   asyncio.run(stream())

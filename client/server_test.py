@@ -7,8 +7,10 @@ def hello():
 
 @app.route("/allocate", methods=['POST'])
 def allocate():
-    req = request.get_json(force=True)
-    return jsonify({'ip': '127.0.0.1', 'port': 8000, 'num_workers': req['num_workers']})
+    #req = request.get_json(force=True)
+    info = request.get_json()
+    app.logger.warning(info)
+    return jsonify({'ip': '127.0.0.1', 'port': 8000, 'info': info})
 
 if __name__ == "__main__":
     app.run()
