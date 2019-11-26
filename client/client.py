@@ -16,37 +16,60 @@ import sys
 import time
 import argparse
 import requests
-scheduler_url = "http://127.0.0.1:5000/register"
+from multiprocessing import Process
+import asyncio
 
-from flask import Flask, request, jsonify
+scheduler_url = "http://127.0.0.1:5000/allocate"
+IP = '127.0.0.1'
+PORT = 8888
 
-app = Flask(__name__)
+def parse_graph(graph_file):
+  return 1
 
-#receive starting node IP here
-@app.route('/')
-def index():
-    #need to parse the info and then redirect to send_data
-    session['my_var'] = 'my_value'
-    return redirect(url_for('send_data'))
+def wait_for_answers(ip, port):
+  async def tcp_answer_client():
+      reader, writer = await asyncio.open_connection(
+          ip, port)
+      try:
+        while True:
+          data = await reader.read(10)
+          print(f'Received: {data.decode()!r}')
+      except KeyboardInterrupt:
+        print('Stopped Reading Data')
+        print('Close the connection')
+        writer.close()
+        await writer.wait_closed()
+        pass
 
-@app.route('/send_data')
-def send_data():
-  my_var = session.get('my_var', None)
-  k = 0
+  asyncio.run(tcp_answer_client())
+
+
+async def handle_streaming(reader, writer):
   try:
-      buff = ''
-      while True:
-          buff += sys.stdin.read(1)
-          if buff.endswith('\n'):
-              print(buff[:-1])
-              buff = ''
-              k = k + 1
+    buff = ''
+    while True:
+        buff = sys.stdin.read(10)
+        if buff == '':
+          break
+        print(f'Send: {buff!r}')
+        writer.write(buff.encode())
+        await writer.drain()
   except KeyboardInterrupt:
-     sys.stdout.flush()
-     pass
-  print(k)
+    print("Close the connection stop streaming")
+    writer.close()
+
+async def stream():
+    server = await asyncio.start_server(
+        handle_streaming, IP, PORT)
+
+    addr = server.sockets[0].getsockname()
+    print(f'Serving on {addr}')
+
+    async with server:
+        await server.serve_forever()
 
 if __name__ == '__main__':
+  #Parsing CL arguments
   parser = argparse.ArgumentParser()
   parser.add_argument("--folder", type=str, help="Directory of .js files")
   parser.add_argument("--workers", type=int, help="number of workers needed")
@@ -55,16 +78,34 @@ if __name__ == '__main__':
   folder = FLAGS.folder
   num_workers = FLAGS.workers
   graph_file = FLAGS.graph
+
+  #extracting graph from graph file
+  graph = parse_graph(graph_file)
+
+  #creating initial request to scheduler
   file_list = os.listdir(folder)
   file_paths = [os.path.join(folder, filename)\
               for filename in file_list]
-  multipart_form_data = {'file{}'.format(num): \
-                          (file_list[num], open(file_paths[num], 'rb'))\
-                          for num in range(len(file_paths))}
-
-  multipart_form_data['num_workers'] = ('', str(num_workers))
-  multipart_form_data['num_files'] = ('', str(len(file_list)))
-
+  multipart_form_data =[('files', open(file_paths[num], 'rb'))\
+                          for num in range(len(file_paths))]
+  multipart_form_data.append(('num_workers',num_workers))
+  multipart_form_data.append(('num_files',len(file_list)))
+  multipart_form_data.append(('graph',graph))
+  #{'new_tasks': [{'program': <file_contents>, 'sinks': [1]}, {'program': <file_contents>, 'sinks': []}]}
+  #making request
   response = requests.post(scheduler_url, files=multipart_form_data)
-  print(response.status_code)
-  app.run(host='127.0.0.1', port=8000)
+  #response = requests.post(scheduler_url, data={'num_workers':2})
+  print(response)
+  if response.status_code != 200:
+    print('Failure Error Code: {}'.format(response.status_code))
+    print('Exiting please try again')
+    exit(1)
+
+  #successful response start client and server to start streaming data and
+  #waiting for answers.
+  info = response.json()
+  print(info)
+  end_ip = info['ip']
+  end_port = info['port']
+  p = Process(target=wait_for_answers, args=(end_ip, end_port))
+  asyncio.run(stream())
