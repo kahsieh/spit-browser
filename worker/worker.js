@@ -5,10 +5,10 @@ var vertex;
 onmessage = function(e) {
   if (e.data["type"] === "script") {
     self.importScripts(e.data["script"])
-    vertex = new Vertex()
+    vertex = new Vertex(self.postMessage)
     return
   }
   for (const message of e.data["messages"]) {
-    self.postMessage(vertex.process(message))
+    vertex.process(message)
   }
 }

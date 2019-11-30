@@ -1,5 +1,8 @@
 class Vertex {
+  constructor(sendFn) {
+    this.sendFn = sendFn
+  }
   process(data) {
-    return data * 2
+    this.sendFn(data * 2)
   }
 }
