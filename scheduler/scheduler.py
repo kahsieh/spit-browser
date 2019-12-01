@@ -10,9 +10,13 @@ from typing import Any, Dict, List, Tuple
 from task import *
 
 app: Flask = Flask(__name__)
-jobs: List[Job] = []
-jobs_lock: Lock = Lock()
-workers: List[Worker] = []
+
+# Client tracker maps client peer ID to an ordered list of tasks.
+clients: Dict[str, List[Task]] = {}
+clients_lock: Lock = Lock()
+
+# Worker tracker maps worker peer ID to the corresponding object.
+workers: Dict[str, Worker] = {}
 workers_lock: Lock = Lock()
 
 @app.route('/')
@@ -21,13 +25,30 @@ def root() -> Response:
   Returns the state of the scheduler.
 
   Returns:
-    jobs (List[Job]): All jobs sent via /allocate.
-    workers (List[Worker]): All workers registered via /register.
+    clients (Dict[str, List[Task]]): All clients registered via /allocate.
+    workers (Dict[str, Worker]): All workers registered via /register.
   """
   return jsonify({
-    'jobs': jobs,
+    'clients': clients,
     'workers': workers,
   })
+
+
+@app.route('/program')
+def program() -> Response:
+  """
+  Returns a client-submitted program.
+
+  Args (GET):
+    client_id (str): Peer ID of initiating client.
+    task_id (int): Task's ID within the job.
+
+  Returns:
+    A JavaScript file.
+  """
+  client_id: str = str(request.args.get('client_id'))
+  task_id: int = int(str(request.args.get('task_id')))
+  return Response(clients[client_id][task_id]['program'], mimetype="text/javascript")
 
 
 @app.route('/register', methods=['POST'])
@@ -35,25 +56,17 @@ def register() -> Response:
   """
   Registers a worker.
 
-  Args:
+  Args (JSON):
+    worker_id (str): Peer ID of worker.
     n_cores (int): Number of cores on the worker.
 
-  Returns:
-    worker_id (int): ID assigned to the worker.
+  Returns (JSON):
+    success (bool): Whether registration succeeded.
   """
   req: Dict[str, Any] = request.get_json(force=True)
-
-  # Construct new Worker.
-  workers_lock.acquire()
-  worker_id: int = len(workers)
-  n_cores: int = req['n_cores']
-  address: str = request.environ['REMOTE_ADDR'] + ':' +\
-                 str(request.environ['REMOTE_PORT'])
-  workers.append(Worker(worker_id, n_cores, address))
-  workers_lock.release()
-
+  workers[req['worker_id']] = Worker(req['worker_id'], req['n_cores'])
   return jsonify({
-    'worker_id': worker_id,
+    'success': True,
   })
 
 
@@ -62,11 +75,11 @@ def heartbeat() -> Response:
   """
   Processes a heartbeat from a worker.
 
-  Args:
-    worker_id (int): ID assigned to the worker.
+  Args (JSON):
+    worker_id (str): Peer ID of worker.
     active_tasks (List[TaskPointer]): List of still-running tasks.
 
-  Returns:
+  Returns (JSON):
     new_tasks (List[Task]): List of new tasks for the worker to run.
   """
   req: Dict[str, Any] = request.get_json(force=True)
@@ -80,42 +93,46 @@ def allocate() -> Response:
   """
   Allocates workers for a new job.
 
-  Args:
-    new_tasks (List[NewTask]): Ordered list of tasks to allocate resources for,
-      where each NewTask contains the keys 'program' (str) and 'contacts'
-      (List[int]).
+  Args (JSON):
+    client_id (str): Peer ID of client.
+    new_tasks (List[NewTask]): Ordered list of tasks to allocate resources for.
+      Each NewTask shall contain the keys 'program' (str) and 'contacts'
+      (List[int] of task indices that this task should be able to contact).
 
-  Returns:
+  Returns (JSON):
     task_pointers (List[TaskPointers]): TaskPointers to each allocation, in the
-      same order as the input.
+      same order as the input. Empty if not enough resources.
   """
   req: Dict[str, Any] = request.get_json(force=True)
-  client_address: str = request.environ['REMOTE_ADDR'] + ':' +\
-                        str(request.environ['REMOTE_PORT'])
-
-  # Construct new Job.
-  jobs_lock.acquire()
-  job_id: int = len(jobs)
-  jobs.append(Job(job_id, []))
-  tasks = jobs[-1]['tasks']
-  jobs_lock.release()
 
   # Allocate new tasks.
-  task_id: int = 0
-  for worker in workers:
-    while task_id < len(req['new_tasks']) and worker.availability() > 0:
-      worker_id: int = worker['worker_id']
-      program: str = req['new_tasks'][task_id]['program']
-      task: Task = Task(job_id, task_id, worker_id, client_address, program, [])
-      worker['pending_tasks'].append(task)
-      tasks.append(task)
-      task_id += 1
-  
+  tasks: List[Task] = []
+  for worker in workers.values():
+    worker.heartbeat_lock.acquire()
+    while len(tasks) < len(req['new_tasks']) and worker.availability() > 0:
+      tasks.append(Task(req['client_id'],
+                        len(tasks),
+                        worker['worker_id'],
+                        req['new_tasks'][len(tasks)]['program'],
+                        []))
+      worker['pending_tasks'].append(tasks[-1])
+
+  # Undo if not enough resources.
+  if len(tasks) < len(req['new_tasks']):
+    for task in tasks:
+      worker[task['worker_id']]['pending_tasks'].remove(task)
+    tasks = []
+
   # Update contact lists.
-  for i, task in enumerate(tasks):
-    task['contacts'] = [TaskPointer(tasks[contact_id], workers)
-                        for contact_id in req['new_tasks'][i]['contacts']]
+  for task in tasks:
+    task['contacts'] = [TaskPointer(tasks[contact_id])
+        for contact_id in req['new_tasks'][task['task_id']]['contacts']]
+
+  # Finalize.
+  clients[req['client_id']] = tasks
+  for worker in workers.values():
+    worker.heartbeat_lock.release()
 
   return jsonify({
-    'task_pointers': [TaskPointer(task, workers) for task in tasks],
+    'task_pointers': [TaskPointer(task) for task in tasks],
   })

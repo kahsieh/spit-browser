@@ -5,60 +5,41 @@ Task Management Library for SPIT-Browser Scheduler
 """
 
 from threading import Lock
-from typing import Any, Dict, List
+from typing import List
 
 class Task(dict):
   """
   Representation of a Task.
 
   Keys:
-    job_id (int): Job to which this task belongs.
+    client_id (str): Peer ID of initiating client.
     task_id (int): Task's ID within the job.
-    worker_id (int): Worker to which this task is assigned.
-    client_address (str): Address of requesting client.
+    worker_id (str): Peer ID of assigned worker.
     program (str): JavaScript program for this task.
     contacts (List[TaskPointer]): TaskPointers for this task's contacts.
   """
-  def __init__(self, job_id: int, task_id: int, worker_id: int,
-               client_address: str, program: str,
-               contacts: List['TaskPointer']):
-    self['job_id'] = job_id
+  def __init__(self, client_id: str, task_id: int, worker_id: str,
+               program: str, contacts: List['TaskPointer']):
+    self['client_id'] = client_id
     self['task_id'] = task_id
     self['worker_id'] = worker_id
-    self['client_address'] = client_address
     self['program'] = program
     self['contacts'] = contacts
 
 
 class TaskPointer(dict):
   """
-  All the information needed to locate a task. Created by joining a Task with
-  the list of Workers.
+  Partial representation of a Task that is sufficient to locate its instance.
 
   Keys:
-    job_id (int): Job to which this task belongs.
+    client_id (str): Peer ID of initiating client.
     task_id (int): Task's ID within the job.
-    worker_id (int): Worker to which this task is assigned.
-    worker_address (str): IP address and port of the worker.
+    worker_id (str): Peer ID of assigned worker
   """
-  def __init__(self, task: Task, workers: List['Worker']):
-    self['job_id'] = task['job_id']
+  def __init__(self, task: Task):
+    self['client_id'] = task['client_id']
     self['task_id'] = task['task_id']
     self['worker_id'] = task['worker_id']
-    self['worker_address'] = workers[task['worker_id']]['address']
-
-
-class Job(dict):
-  """
-  Representation of a Job.
-
-  Keys:
-    job_id (int): Job's ID.
-    tasks (List[Task]): List of Tasks making up this Job.
-  """
-  def __init__(self, job_id: int, tasks: List[Task]):
-    self['job_id'] = job_id
-    self['tasks'] = tasks
 
 
 class Worker(dict):
@@ -66,16 +47,14 @@ class Worker(dict):
   Tracks the status of a Worker.
 
   Keys:
-    worker_id (int): ID assigned to the worker.
+    worker_id (str): Peer ID of worker.
     n_cores (int): Number of cores on the worker.
-    address (str): IP address and port of the worker.
-    active_tasks (List[Union[TaskPointer, Task]]): Currently running tasks.
+    active_tasks (List[Task]): Currently running tasks.
     pending_tasks (List[Task]): Tasks to be sent to the worker.
   """
-  def __init__(self, worker_id: int, n_cores: int, address: str):
+  def __init__(self, worker_id: int, n_cores: int):
     self['worker_id'] = worker_id
     self['n_cores'] = n_cores
-    self['address'] = address
     self['active_tasks'] = []
     self['pending_tasks'] = []
     self.heartbeat_lock: Lock = Lock()
@@ -96,9 +75,20 @@ class Worker(dict):
       (List[Task]): List of new tasks for the worker to run.
     """
     self.heartbeat_lock.acquire()
-    n_send: int = self['n_cores'] - len(active_tasks)
+
+    # Remove completed tasks.
+    active_set: set = set((ptr['client_id'], ptr['task_id']) for ptr in active_tasks)
+    self['active_tasks'] = list(filter(
+      lambda task: (task['client_id'], task['task_id']) in active_set,
+      self['active_tasks']
+    ))
+
+    # Create list of new tasks.
+    n_send: int = self['n_cores'] - len(self['active_tasks'])
     send: List[Task] = self['pending_tasks'][:n_send]
-    self['active_tasks'] = active_tasks + send
+
+    # Update fields.
+    self['active_tasks'] += send
     self['pending_tasks'] = self['pending_tasks'][n_send:]
     self.heartbeat_lock.release()
     return send
