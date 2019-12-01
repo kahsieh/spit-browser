@@ -24,7 +24,7 @@ def root() -> Response:
   """
   Returns the state of the scheduler.
 
-  Returns:
+  Returns (JSON):
     clients (Dict[str, List[Task]]): All clients registered via /allocate.
     workers (Dict[str, Worker]): All workers registered via /register.
   """
