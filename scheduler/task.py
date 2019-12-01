@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Task Management Library for SPIT-Browser Scheduler
+SPIT-Browser Scheduler: Task Management Library
 """
 
 from threading import Lock

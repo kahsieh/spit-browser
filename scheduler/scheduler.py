@@ -53,7 +53,7 @@ def program() -> Response:
     return Response(program, mimetype="text/javascript")
   except ValueError:
     abort(400)
-  except KeyError:
+  except (KeyError, IndexError):
     abort(404)
 
 

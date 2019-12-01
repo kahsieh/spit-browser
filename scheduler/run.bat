@@ -1,7 +1,7 @@
 :<<BATCH
 
 ::
-:: Runner for SPIT-Browser Scheduler
+:: SPIT-Browser Scheduler: Runner
 ::
 
 @echo off
