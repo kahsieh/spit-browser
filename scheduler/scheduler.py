@@ -4,9 +4,9 @@
 SPIT-Browser Scheduler
 """
 
-from flask import Flask, jsonify, request, Response
+from flask import abort, Flask, jsonify, request, Response
 from threading import Lock
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 from task import *
 
 app: Flask = Flask(__name__)
@@ -46,9 +46,15 @@ def program() -> Response:
   Returns:
     A JavaScript file.
   """
-  client_id: str = str(request.args.get('client_id'))
-  task_id: int = int(str(request.args.get('task_id')))
-  return Response(clients[client_id][task_id]['program'], mimetype="text/javascript")
+  try:
+    client_id: str = str(request.args.get('client_id'))
+    task_id: int = int(str(request.args.get('task_id')))
+    program: str = clients[client_id][task_id]['program']
+    return Response(program, mimetype="text/javascript")
+  except ValueError:
+    abort(400)
+  except KeyError:
+    abort(404)
 
 
 @app.route('/register', methods=['POST'])
@@ -64,10 +70,15 @@ def register() -> Response:
     success (bool): Whether registration succeeded.
   """
   req: Dict[str, Any] = request.get_json(force=True)
-  workers[req['worker_id']] = Worker(req['worker_id'], req['n_cores'])
-  return jsonify({
-    'success': True,
-  })
+  try:
+    if req['worker_id'] in workers:
+      abort(403)
+    workers[req['worker_id']] = Worker(req['worker_id'], req['n_cores'])
+    return jsonify({
+      'success': True,
+    })
+  except KeyError:
+    abort(400)
 
 
 @app.route('/heartbeat', methods=['POST'])
@@ -83,9 +94,12 @@ def heartbeat() -> Response:
     new_tasks (List[Task]): List of new tasks for the worker to run.
   """
   req: Dict[str, Any] = request.get_json(force=True)
-  return jsonify({
-    'new_tasks': workers[req['worker_id']].heartbeat(req['active_tasks']),
-  })
+  try:
+    return jsonify({
+      'new_tasks': workers[req['worker_id']].heartbeat(req['active_tasks']),
+    })
+  except KeyError:
+    abort(400)
 
 
 @app.route('/allocate', methods=['POST'])
@@ -104,35 +118,37 @@ def allocate() -> Response:
       same order as the input. Empty if not enough resources.
   """
   req: Dict[str, Any] = request.get_json(force=True)
+  try:
+    # Allocate new tasks.
+    tasks: List[Task] = []
+    for worker in workers.values():
+      worker.heartbeat_lock.acquire()
+      while len(tasks) < len(req['new_tasks']) and worker.availability() > 0:
+        tasks.append(Task(req['client_id'],
+                          len(tasks),
+                          worker['worker_id'],
+                          req['new_tasks'][len(tasks)]['program'],
+                          []))
+        worker['pending_tasks'].append(tasks[-1])
 
-  # Allocate new tasks.
-  tasks: List[Task] = []
-  for worker in workers.values():
-    worker.heartbeat_lock.acquire()
-    while len(tasks) < len(req['new_tasks']) and worker.availability() > 0:
-      tasks.append(Task(req['client_id'],
-                        len(tasks),
-                        worker['worker_id'],
-                        req['new_tasks'][len(tasks)]['program'],
-                        []))
-      worker['pending_tasks'].append(tasks[-1])
+    # Undo if not enough resources.
+    if len(tasks) < len(req['new_tasks']):
+      for task in tasks:
+        worker[task['worker_id']]['pending_tasks'].remove(task)
+      tasks = []
 
-  # Undo if not enough resources.
-  if len(tasks) < len(req['new_tasks']):
+    # Update contact lists.
     for task in tasks:
-      worker[task['worker_id']]['pending_tasks'].remove(task)
-    tasks = []
+      task['contacts'] = [TaskPointer(tasks[contact_id])
+          for contact_id in req['new_tasks'][task['task_id']]['contacts']]
 
-  # Update contact lists.
-  for task in tasks:
-    task['contacts'] = [TaskPointer(tasks[contact_id])
-        for contact_id in req['new_tasks'][task['task_id']]['contacts']]
+    # Finalize.
+    clients[req['client_id']] = tasks
+    for worker in workers.values():
+      worker.heartbeat_lock.release()
 
-  # Finalize.
-  clients[req['client_id']] = tasks
-  for worker in workers.values():
-    worker.heartbeat_lock.release()
-
-  return jsonify({
-    'task_pointers': [TaskPointer(task) for task in tasks],
-  })
+    return jsonify({
+      'task_pointers': [TaskPointer(task) for task in tasks],
+    })
+  except KeyError:
+    abort(400)

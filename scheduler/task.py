@@ -34,7 +34,7 @@ class TaskPointer(dict):
   Keys:
     client_id (str): Peer ID of initiating client.
     task_id (int): Task's ID within the job.
-    worker_id (str): Peer ID of assigned worker
+    worker_id (str): Peer ID of assigned worker.
   """
   def __init__(self, task: Task):
     self['client_id'] = task['client_id']
