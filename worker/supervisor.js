@@ -23,7 +23,7 @@ function register() {
     // Register worker with scheduler
     const requestParams = {
       'headers': {
-        'content-type:': 'application/json'
+        'content-type': 'application/json'
       },
       'method': 'POST',
       'body': {
@@ -61,7 +61,7 @@ function setupWorker() {
 function sendHeartbeat() {
   const requestParams = {
     'headers': {
-      'content-type:': 'application/json'
+      'content-type': 'application/json'
     },
     'method': 'POST',
     'body': {
