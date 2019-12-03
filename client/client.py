@@ -19,7 +19,6 @@ import requests
 from multiprocessing import Process
 import asyncio
 
-scheduler_url = "http://127.0.0.1:5000/allocate"
 IP = '127.0.0.1'
 PORT = 8888
 
@@ -30,7 +29,7 @@ def create_payload(graph_file, folder):
       items = line.split()
       file_path = os.path.join(folder, items[0])
       with open(file_path, 'r') as js_file:
-        payload['new_tasks'].append({'program': js_file.read(), 'sinks':[int(i) for i in items[1:]]})
+        payload['new_tasks'].append({'program': js_file.read(), 'contacts':[int(i) for i in items[1:]]})
   return payload
 
 def wait_for_answers(ip, port):
@@ -55,7 +54,7 @@ async def handle_streaming(reader, writer):
   try:
     buff = ''
     while True:
-        buff = sys.stdin.read(10)
+        buff = sys.stdin.read(1)
         if buff == '':
           break
         print(f'Send: {buff!r}')
@@ -78,13 +77,15 @@ async def stream():
 if __name__ == '__main__':
   #Parsing CL arguments
   parser = argparse.ArgumentParser()
-  parser.add_argument("--folder", type=str, help="Directory of .js files")
+  parser.add_argument("--folder", type=str, help="Directory of .js files", default = 'test')
   #parser.add_argument("--workers", type=int, help="number of workers needed")
-  parser.add_argument("--graph", type=str, help="graph_file")
+  parser.add_argument("--graph", type=str, help="graph_file", default='graph_file.txt')
+  parser.add_argument("--scheduler_url", type=str, help="graph_file", default="http://127.0.0.1:5000/allocate")
   FLAGS = parser.parse_args()
   folder = FLAGS.folder
   #num_workers = FLAGS.workers
   graph_file = FLAGS.graph
+  scheduler_url = FLAGS.scheduler_url
 
   #making request payload
   payload = create_payload(graph_file, folder)
@@ -98,6 +99,7 @@ if __name__ == '__main__':
   #successful response start client and server to start streaming data and
   #waiting for answers.
   info = response.json()
+  print(info)
   ip_port = info['task_pointers'][-1]['worker_address']
   end_ip = ip_port.split(':')[0]
   end_port = int(ip_port.split(':')[1])
