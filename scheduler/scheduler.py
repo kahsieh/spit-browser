@@ -6,18 +6,16 @@ SPIT-Browser Scheduler
 
 from flask import abort, Flask, jsonify, request, Response
 from threading import Lock
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set, Tuple
 from task import *
 
 app: Flask = Flask(__name__)
 
 # Client tracker maps client peer ID to an ordered list of tasks.
 clients: Dict[str, List[Task]] = {}
-clients_lock: Lock = Lock()
 
 # Worker tracker maps worker peer ID to the corresponding object.
 workers: Dict[str, Worker] = {}
-workers_lock: Lock = Lock()
 
 @app.route('/')
 def root() -> Response:
@@ -73,12 +71,12 @@ def register() -> Response:
   try:
     if req['worker_id'] in workers:
       abort(403)
-    workers[req['worker_id']] = Worker(req['worker_id'], req['n_cores'])
+    workers[req['worker_id']] = Worker(req['worker_id'], req['n_cores'], deregister)
     return jsonify({
       'success': True,
     })
   except KeyError:
-    abort(400)
+    abort(404)
 
 
 @app.route('/heartbeat', methods=['POST'])
@@ -99,7 +97,7 @@ def heartbeat() -> Response:
       'new_tasks': workers[req['worker_id']].heartbeat(req['active_tasks']),
     })
   except KeyError:
-    abort(400)
+    abort(404)
 
 
 @app.route('/allocate', methods=['POST'])
@@ -151,4 +149,74 @@ def allocate() -> Response:
       'task_pointers': [TaskPointer(task) for task in tasks],
     })
   except KeyError:
+    abort(404)
+
+
+@app.route('/allocation')
+def allocation() -> Response:
+  """
+  Gets the allocation for a client.
+
+  Args (GET):
+    client_id (str): Peer ID of client.
+
+  Returns (JSON):
+    task_pointers (List[TaskPointers]): TaskPointers to each allocation, in the
+      same order as the original input. Empty if not enough resources.
+  """
+  try:
+    client_id: str = str(request.args.get('client_id'))
+    return jsonify({
+      'task_pointers': [TaskPointer(task) for task in clients[client_id]],
+    })
+  except ValueError:
     abort(400)
+  except KeyError:
+    abort(404)
+
+
+def deregister(worker_id: str):
+  print(f'Deregistering {worker_id}.')
+  dead = workers.pop(worker_id)
+  realloc: List[Task] = dead['active_tasks'] + dead['pending_tasks']
+
+  # Reallocate tasks.
+  i: int = 0
+  for worker in workers.values():
+    worker.heartbeat_lock.acquire()
+    while i < len(realloc) and worker.availability() > 0:
+      realloc[i]['worker_id'] = worker['worker_id']
+      worker['pending_tasks'].append(realloc[i])
+      i += 1
+
+  # Cancel jobs if not enough resources. (Stops outgoing tasks but doesn't kill
+  # already-active tasks. They'll have to die on their own.)
+  if i < len(realloc):
+    for client_id in set(task['client_id'] for task in realloc):
+      for task in clients[client_id]:
+        try:
+          workers[task['worker_id']]['pending_tasks'].remove(task)
+        except (KeyError, ValueError):
+          pass
+      clients[client_id] = []
+
+  # Update contact lists.
+  realloc_map: Dict[Tuple[str, int], str] = {
+    (task['client_id'], task['task_id']): task['worker_id']
+    for task in realloc
+  }
+  for client in clients.values():
+    for task in client:
+      contacts_changed: bool = False
+      for contact in task['contacts']:
+        key: Tuple[str, int] = (contact['client_id'], contact['task_id'])
+        if key in realloc_map:
+          contact['worker_id'] = realloc_map[key]
+          contacts_changed = True
+      if contacts_changed and task in workers[task['worker_id']]['active_tasks']:
+        workers[task['worker_id']]['active_tasks'].remove(task)
+        workers[task['worker_id']]['pending_tasks'].append(task)
+
+  # Finalize.
+  for worker in workers.values():
+    worker.heartbeat_lock.release()
