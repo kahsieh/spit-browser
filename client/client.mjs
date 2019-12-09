@@ -8,29 +8,37 @@ const BATCH_DELAY_MS = 1000;
 
 function register(graph, scheduler_addr) {
   // Create Peer for incoming connections
-  peer = peerJs({key: API_KEY});
+  //peer = peerJs({key: API_KEY});
+  const peer = new Peer({'key': API_KEY});
   peer.on('open', function(id) {
     // Register worker with scheduler
-    const requestParams = {
-      'headers': {
-        'content-type': 'application/json'
-      },
-      'method': 'POST',
-      'body': {
-        'new_tasks': graph,
-        'client_id': id
+    console.log(peer.id)
+    const requestParams = {json:
+      {
+        'new_tasks': JSON.stringify(graph),
+        'client_id': JSON.stringify(peer.id)
       }
     }
-    fetch(scheduler_addr + "/allocate", requestParams)
-      .then(function(data){
-        console.log("Successfully registered client")
-        var start_id = data['task_pointers'][0]['worker_id']
-        setupClient(start_id)
-      })
-      .catch(function(error){
-        console.error("Failed to allocate")
+    console.log(requestParams);
+    request.post(scheduler_addr + "/allocate", requestParams,
+    (error, res, body) => {
+      if (error) {
         console.error(error)
-      });
+        return
+      }
+      console.log(`statusCode: ${res.statusCode}`)
+      console.log(body)
+    });
+  /*fetch(scheduler_addr + "/allocate", requestParams)
+    .then(function(data){
+      console.log("Successfully registered client")
+      var start_id = data['task_pointers'][0]['worker_id']
+      setupClient(start_id)
+    })
+    .catch(function(error){
+      console.error("Failed to allocate")
+      console.error(error)
+    });*/
   });
 }
 
@@ -84,7 +92,9 @@ function readGraphSync(graph_file, files) {
 const minimist = require('minimist');
 const fs = require('fs');
 const path = require('path');
-const peerJs = require('peerjs-nodejs');
+//const peerJs = require('peerjs-nodejs');
+import Peer from 'peerjs';
+const request = require('request');
 
 process.stdin.setEncoding('utf8');
 
@@ -100,5 +110,5 @@ const files = readFilesSync(args.f + '/');
 const graph = readGraphSync(args.g, files);
 
 var scheduler_addr = args.s
-console.log(graph, scheduler_addr)
-register(scheduler_addr);
+//console.log(graph, scheduler_addr)
+register(graph, scheduler_addr);

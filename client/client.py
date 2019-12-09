@@ -30,8 +30,11 @@ def create_payload(graph_file, folder):
       file_path = os.path.join(folder, items[0])
       with open(file_path, 'r') as js_file:
         payload['new_tasks'].append({'program': js_file.read(), 'contacts':[int(i) for i in items[1:]]})
+        payload['client_id'] = IP + ':' + str(PORT)
   return payload
 
+
+'''
 def wait_for_answers(ip, port):
   async def tcp_answer_client():
       reader, writer = await asyncio.open_connection(
@@ -48,9 +51,21 @@ def wait_for_answers(ip, port):
         pass
 
   asyncio.run(tcp_answer_client())
+  '''
 
+async def wait_answer(reader):
+  try:
+    while True:
+      data = await reader.read(10)
+      print(f'Received: {data.decode()!r}')
+  except KeyboardInterrupt:
+    print('Stopped Reading Data')
+    print('Close the connection')
+    writer.close()
+    await writer.wait_closed()
+    pass
 
-async def handle_streaming(reader, writer):
+async def stream_data(writer):
   try:
     buff = ''
     while True:
@@ -63,6 +78,10 @@ async def handle_streaming(reader, writer):
   except KeyboardInterrupt:
     print("Close the connection stop streaming")
     writer.close()
+
+async def handle_streaming(reader, writer):
+  await stream_data(writer)
+  await wait_answer(reader)
 
 async def stream():
     server = await asyncio.start_server(
@@ -80,7 +99,7 @@ if __name__ == '__main__':
   parser.add_argument("--folder", type=str, help="Directory of .js files", default = 'test')
   #parser.add_argument("--workers", type=int, help="number of workers needed")
   parser.add_argument("--graph", type=str, help="graph_file", default='graph_file.txt')
-  parser.add_argument("--scheduler_url", type=str, help="graph_file", default="http://127.0.0.1:5000/allocate")
+  parser.add_argument("--scheduler_url", type=str, help="scheduler address", default="http://127.0.0.1:5000/allocate")
   FLAGS = parser.parse_args()
   folder = FLAGS.folder
   #num_workers = FLAGS.workers
@@ -100,8 +119,8 @@ if __name__ == '__main__':
   #waiting for answers.
   info = response.json()
   print(info)
-  ip_port = info['task_pointers'][-1]['worker_address']
-  end_ip = ip_port.split(':')[0]
-  end_port = int(ip_port.split(':')[1])
-  p = Process(target=wait_for_answers, args=(end_ip, end_port))
+  #ip_port = info['task_pointers'][-1]['worker_address']
+  #end_ip = ip_port.split(':')[0]
+  #end_port = int(ip_port.split(':')[1])
+  #p = Process(target=wait_for_answers, args=(end_ip, end_port))
   asyncio.run(stream())
