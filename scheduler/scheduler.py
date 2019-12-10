@@ -5,10 +5,10 @@ SPIT-Browser Scheduler
 """
 
 from flask import abort, Flask, jsonify, request, Response
+from flask_cors import CORS
 from threading import Lock
 from typing import Any, Dict, List, Set, Tuple
 from task import *
-from flask_cors import CORS
 
 app: Flask = Flask(__name__)
 CORS(app)
@@ -40,16 +40,14 @@ def program() -> Response:
   Returns a client-submitted program.
 
   Args (GET):
-    client_id (str): Peer ID of initiating client.
-    task_id (int): Task's ID within the job.
+    task_id (str): Task's ID: {client_id}~{vertex_id}~{worker_id}.
 
   Returns:
     A JavaScript file.
   """
   try:
-    client_id: str = str(request.args.get('client_id'))
-    task_id: int = int(str(request.args.get('task_id')))
-    program: str = clients[client_id][task_id]['program']
+    client_id, vertex_id, _ = str(request.args.get('instance_id')).split('~')
+    program: str = clients[client_id][int(vertex_id)]['program']
     return Response(program, mimetype="text/javascript")
   except ValueError:
     abort(400)
@@ -71,9 +69,10 @@ def register() -> Response:
   """
   req: Dict[str, Any] = request.get_json(force=True)
   try:
-    if req['worker_id'] in workers:
+    worker_id, n_cores = req['worker_id'], req['n_cores']
+    if worker_id in workers:
       abort(403)
-    workers[req['worker_id']] = Worker(req['worker_id'], req['n_cores'], deregister)
+    workers[worker_id] = Worker(worker_id, n_cores, deregister)
     return jsonify({
       'success': True,
     })
@@ -88,15 +87,16 @@ def heartbeat() -> Response:
 
   Args (JSON):
     worker_id (str): Peer ID of worker.
-    active_tasks (List[TaskPointer]): List of still-running tasks.
+    active_tasks (List[str]): List of ID's of still-running tasks.
 
   Returns (JSON):
     new_tasks (List[Task]): List of new tasks for the worker to run.
   """
   req: Dict[str, Any] = request.get_json(force=True)
   try:
+    worker_id, active_tasks = req['worker_id'], req['active_tasks']
     return jsonify({
-      'new_tasks': workers[req['worker_id']].heartbeat(req['active_tasks']),
+      'new_tasks': workers[worker_id].heartbeat(active_tasks),
     })
   except KeyError:
     abort(404)
@@ -109,46 +109,46 @@ def allocate() -> Response:
 
   Args (JSON):
     client_id (str): Peer ID of client.
-    new_tasks (List[NewTask]): Ordered list of tasks to allocate resources for.
-      Each NewTask shall contain the keys 'program' (str) and 'contacts'
+    new_tasks (List[NewTask]): Ordered list of vertices to allocate resources
+      for. Each NewTask shall contain the keys 'program' (str) and 'contacts'
       (List[int] of task indices that this task should be able to contact).
 
   Returns (JSON):
-    task_pointers (List[TaskPointers]): TaskPointers to each allocation, in the
-      same order as the input. Empty if not enough resources.
+    task_ids (List[str]): Task ID's for each allocation, in the same order as
+      the input. Empty if not enough resources.
   """
   req: Dict[str, Any] = request.get_json(force=True)
   try:
+    client_id, new_tasks = req['client_id'], req['new_tasks']
+
     # Allocate new tasks.
     tasks: List[Task] = []
-    for worker in workers.values():
+    for worker_id, worker in workers.items():
       worker.heartbeat_lock.acquire()
-      while len(tasks) < len(req['new_tasks']) and worker.availability() > 0:
-        tasks.append(Task(req['client_id'],
-                          len(tasks),
-                          worker['worker_id'],
-                          req['new_tasks'][len(tasks)]['program'],
-                          []))
+      while len(tasks) < len(new_tasks) and worker.availability() > 0:
+        tasks.append(Task(client_id, len(tasks), worker_id,
+                          new_tasks[len(tasks)]['program'], []))
         worker['pending_tasks'].append(tasks[-1])
 
     # Undo if not enough resources.
-    if len(tasks) < len(req['new_tasks']):
+    if len(tasks) < len(new_tasks):
       for task in tasks:
         worker[task['worker_id']]['pending_tasks'].remove(task)
       tasks = []
 
     # Update contact lists.
-    for task in tasks:
-      task['contacts'] = [TaskPointer(tasks[contact_id])
-          for contact_id in req['new_tasks'][task['task_id']]['contacts']]
+    else:
+      for task in tasks:
+        task['contacts'] = [tasks[contact_id]['task_id']
+          for contact_id in new_tasks[task['vertex_id']]['contacts']]
 
     # Finalize.
-    clients[req['client_id']] = tasks
+    clients[client_id] = tasks
     for worker in workers.values():
       worker.heartbeat_lock.release()
 
     return jsonify({
-      'task_pointers': [TaskPointer(task) for task in tasks],
+      'task_ids': [task['task_id'] for task in tasks],
     })
   except KeyError:
     abort(404)
@@ -163,13 +163,13 @@ def allocation() -> Response:
     client_id (str): Peer ID of client.
 
   Returns (JSON):
-    task_pointers (List[TaskPointers]): TaskPointers to each allocation, in the
-      same order as the original input. Empty if not enough resources.
+    task_ids (List[str]): Task ID's for each allocation, in the same order as
+      the original input. Empty if not enough resources.
   """
   try:
     client_id: str = str(request.args.get('client_id'))
     return jsonify({
-      'task_pointers': [TaskPointer(task) for task in clients[client_id]],
+      'task_ids': [task['task_id'] for task in clients[client_id]],
     })
   except ValueError:
     abort(400)
@@ -184,10 +184,13 @@ def deregister(worker_id: str):
 
   # Reallocate tasks.
   i: int = 0
-  for worker in workers.values():
+  for worker_id, worker in workers.items():
     worker.heartbeat_lock.acquire()
     while i < len(realloc) and worker.availability() > 0:
-      realloc[i]['worker_id'] = worker['worker_id']
+      realloc[i]['task_id_old'] = realloc[i]['task_id']
+      client_id, vertex_id, _ = realloc[i]['task_id_old'].split('~')
+      realloc[i]['task_id'] = f'{client_id}~{vertex_id}~{worker_id}'
+      realloc[i]['worker_id'] = worker_id
       worker['pending_tasks'].append(realloc[i])
       i += 1
 
@@ -203,21 +206,19 @@ def deregister(worker_id: str):
       clients[client_id] = []
 
   # Update contact lists.
-  realloc_map: Dict[Tuple[str, int], str] = {
-    (task['client_id'], task['task_id']): task['worker_id']
-    for task in realloc
-  }
-  for client in clients.values():
-    for task in client:
-      contacts_changed: bool = False
-      for contact in task['contacts']:
-        key: Tuple[str, int] = (contact['client_id'], contact['task_id'])
-        if key in realloc_map:
-          contact['worker_id'] = realloc_map[key]
-          contacts_changed = True
-      if contacts_changed and task in workers[task['worker_id']]['active_tasks']:
-        workers[task['worker_id']]['active_tasks'].remove(task)
-        workers[task['worker_id']]['pending_tasks'].append(task)
+  else:
+    realloc_map: Dict[Tuple[str, int], str] =\
+      {task['task_id_old']: task['task_id'] for task in realloc}
+    for client in clients.values():
+      for task in client:
+        contacts_changed: bool = False
+        for i, contact in enumerate(task['contacts']):
+          if contact in realloc_map:
+            task['contacts'][i] = realloc_map[contact]
+            contacts_changed = True
+        if contacts_changed and task in workers[task['worker_id']]['active_tasks']:
+          workers[task['worker_id']]['active_tasks'].remove(task)
+          workers[task['worker_id']]['pending_tasks'].append(task)
 
   # Finalize.
   for worker in workers.values():
