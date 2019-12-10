@@ -61,7 +61,7 @@ def register() -> Response:
   Registers a worker.
 
   Args (JSON):
-    worker_id (str): Peer ID of worker.
+    worker_id (str): ID of worker.
     n_cores (int): Number of cores on the worker.
 
   Returns (JSON):
@@ -86,7 +86,7 @@ def heartbeat() -> Response:
   Processes a heartbeat from a worker.
 
   Args (JSON):
-    worker_id (str): Peer ID of worker.
+    worker_id (str): ID of worker.
     active_tasks (List[str]): List of ID's of still-running tasks.
 
   Returns (JSON):
@@ -108,7 +108,7 @@ def allocate() -> Response:
   Allocates workers for a new job.
 
   Args (JSON):
-    client_id (str): Peer ID of client.
+    client_id (str): ID of client.
     new_tasks (List[NewTask]): Ordered list of vertices to allocate resources
       for. Each NewTask shall contain the keys 'program' (str) and 'contacts'
       (List[int] of task indices that this task should be able to contact).
@@ -160,7 +160,7 @@ def allocation() -> Response:
   Gets the allocation for a client.
 
   Args (GET):
-    client_id (str): Peer ID of client.
+    client_id (str): ID of client.
 
   Returns (JSON):
     task_ids (List[str]): Task ID's for each allocation, in the same order as
