@@ -8,8 +8,10 @@ from flask import abort, Flask, jsonify, request, Response
 from threading import Lock
 from typing import Any, Dict, List, Set, Tuple
 from task import *
+from flask_cors import CORS
 
 app: Flask = Flask(__name__)
+CORS(app)
 
 # Client tracker maps client peer ID to an ordered list of tasks.
 clients: Dict[str, List[Task]] = {}
