@@ -1,6 +1,6 @@
 console.log("Running Supervisor")
 // Constants
-const SCHEDULER_ADDR = "";
+const SCHEDULER_ADDR = "http://127.0.0.1:5000";
 const API_KEY = 'lwjd5qra8257b9';
 const TASK_SCRIPT = "./worker.js";
 const BATCH_DELAY_MS = 1000;
@@ -14,6 +14,7 @@ var outQueue = {}
 var tasks = {}
 var contacts = {}
 var peer;
+var my_id;
 
 
 function register() {
@@ -21,15 +22,16 @@ function register() {
   peer = new Peer({key: API_KEY});
   peer.on('open', function(id) {
     // Register worker with scheduler
+    my_id = id;
     const requestParams = {
       'headers': {
         'content-type': 'application/json'
       },
       'method': 'POST',
-      'body': {
+      'body': JSON.stringify({
         'n_cores': NUM_CORES,
-        'worker_id': id
-      }
+        'worker_id': my_id
+      })
     }
     fetch(SCHEDULER_ADDR + "/register", requestParams)
       .then(function(data){
@@ -64,17 +66,19 @@ function sendHeartbeat() {
       'content-type': 'application/json'
     },
     'method': 'POST',
-    'body': {
+    'body': JSON.stringify({
       'active_tasks': Object.keys(tasks),
-      'worker_id': id
-    }
+      'worker_id': my_id
+    })
   }
   fetch(SCHEDULER_ADDR + "/heartbeat", requestParams)
     .then(function(data){
-      newTasks = data.json()
-      for (const task of newTasks) {
-        registerTask(task['task_id'], task['program'], task['contacts'])
-      }
+      data.json().then(json => {
+        newTasks = json["new_tasks"]
+        for (const task of newTasks) {
+          registerTask(task['task_id'], task['program'], task['contacts'])
+        }
+      })
     })
     .catch(function(error){
       console.error("Failed to send heartbeat:")
