@@ -111,7 +111,7 @@ function registerTask(taskId, script, contacts) {
   inQueue[taskId] = []
   for (const outTask of contacts) {
     outTaskId = outTask['task_id']
-    outTaskWorkerId = ['worker_id']
+    outTaskWorkerId = outTask['worker_id']
     if (!outQueue.hasOwnProperty(outTaskWorkerId)) {
       outQueue[outTaskWorkerId] = {}
       contacts[outTaskWorkerId] = peer.connect(outTaskWorkerId)
