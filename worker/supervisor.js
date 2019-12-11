@@ -113,6 +113,9 @@ function registerTask(taskId, contacts) {
   inQueue[taskId] = []
   for (const outTask of contacts) {
     outTaskWorkerId = outTask.split("~")[2]
+    if (my_id === outTaskWorkerId) {
+      break;
+    }
     if (!outQueue.hasOwnProperty(outTaskWorkerId)) {
       outQueue[outTaskWorkerId] = {}
     }
