@@ -2,7 +2,7 @@ console.log("Running Supervisor")
 // Constants
 const SCHEDULER_ADDR = "http://127.0.0.1:5000";
 const API_KEY = 'lwjd5qra8257b9';
-const TASK_SCRIPT = "./worker.js";
+const TASK_SCRIPT = "program/";
 const BATCH_DELAY_MS = 1000;
 const HEARTBEAT_INTERVAL_MS = 5000;
 const NUM_CORES = window.navigator.hardwareConcurrency;
@@ -76,7 +76,7 @@ function sendHeartbeat() {
       data.json().then(json => {
         newTasks = json["new_tasks"]
         for (const task of newTasks) {
-          registerTask(task['task_id'], task['program'], task['contacts'])
+          registerTask(task['task_id'], task['contacts'])
         }
       })
     })
@@ -89,20 +89,18 @@ function sendHeartbeat() {
 function recieveMessages(all_messages) {
   for (const task_id in all_messages) {
     messages = all_messages[task_id]
-    inQueue[task_id].concat(messages)
+    inQueue[task_id] = inQueue[task_id].concat(messages)
   }
 }
 
-function registerTask(taskId, script, contacts) {
+function registerTask(taskId, contacts) {
   // Create webworker to run task
-  var task = new Worker(TASK_SCRIPT)
-  task.postMessage({"type":"script", "script":script})
+  var task = new Worker(TASK_SCRIPT + taskId)
   // Add outgoing messages to queue
   task.addEventListener('message', function(e) {
     for (const outTask of contacts) {
-      outTaskId = outTask['task_id']
-      outTaskWorkerId = ['worker_id']
-      outQueue[outTaskWorkerId][outTaskId].push(e.data)
+      outTaskWorkerId = outTask.split("~")[2]
+      outQueue[outTaskWorkerId][outTask].push(e.data)
     }
   }, false)
 
@@ -110,31 +108,32 @@ function registerTask(taskId, script, contacts) {
   tasks[taskId] = task
   inQueue[taskId] = []
   for (const outTask of contacts) {
-    outTaskId = outTask['task_id']
-    outTaskWorkerId = outTask['worker_id']
+    outTaskWorkerId = outTask.split("~")[2]
     if (!outQueue.hasOwnProperty(outTaskWorkerId)) {
       outQueue[outTaskWorkerId] = {}
-      contacts[outTaskWorkerId] = peer.connect(outTaskWorkerId)
     }
-    if (!outQueue[outTaskWorkerId].hasOwnProperty(outTaskId)) {
-      outQueue[outTaskWorkerId][outTaskId] = []
+    if (!outQueue[outTaskWorkerId].hasOwnProperty(outTask)) {
+      outQueue[outTaskWorkerId][outTask] = []
     }
   }
 }
 
 function deliverMessages() {
   for (var id in inQueue) {
-    tasks[id].postMessage({"type":"message", "messages":inQueue[id]})
+    tasks[id].postMessage(inQueue[id])
     inQueue[id] = []
   }
 }
 
 function sendMessages() {
   for (const workerId in outQueue) {
-    contacts[workerId].send({'messages': outQueue[workerId]});
-    for (const taskId in outQueue[workerId]) {
-      outQueue[workerId][taskId] = []
-    }
+    conn = peer.connect(workerId)
+    conn.on('open', function(){
+      conn.send({'messages': outQueue[workerId]});
+      for (const taskId in outQueue[workerId]) {
+        outQueue[workerId][taskId] = []
+      }
+    })
   }
 }
 
