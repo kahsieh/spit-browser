@@ -100,7 +100,11 @@ function registerTask(taskId, contacts) {
   task.addEventListener('message', function(e) {
     for (const outTask of contacts) {
       outTaskWorkerId = outTask.split("~")[2]
-      outQueue[outTaskWorkerId][outTask].push(e.data)
+      if (my_id === outTaskWorkerId) {
+        inQueue[outTask].push(e.data)
+      } else {
+        outQueue[outTaskWorkerId][outTask].push(e.data)
+      }
     }
   }, false)
 
@@ -109,6 +113,9 @@ function registerTask(taskId, contacts) {
   inQueue[taskId] = []
   for (const outTask of contacts) {
     outTaskWorkerId = outTask.split("~")[2]
+    if (my_id === outTaskWorkerId) {
+      break;
+    }
     if (!outQueue.hasOwnProperty(outTaskWorkerId)) {
       outQueue[outTaskWorkerId] = {}
     }
