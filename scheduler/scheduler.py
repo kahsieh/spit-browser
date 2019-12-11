@@ -39,7 +39,7 @@ def program(task_id) -> Response:
   """
   Returns a client-submitted program.
 
-  Args (GET):
+  Args (URL):
     task_id (str): Task's ID: {client_id}~{vertex_id}~{worker_id}.
 
   Returns:
@@ -54,12 +54,17 @@ def program(task_id) -> Response:
   except (KeyError, IndexError):
     abort(404)
 
+
 @app.route('/worker/<path:path>')
 def send_js(path):
-    '''
-    Serves static worker files
-    '''
-    return send_from_directory('../worker/', path)
+  """
+  Serves static worker files.
+
+  Args (URL):
+    path (str): Path to static file.
+  """
+  return send_from_directory('../worker/', path)
+
 
 @app.route('/register', methods=['POST'])
 def register() -> Response:
