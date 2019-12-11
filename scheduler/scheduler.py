@@ -211,8 +211,15 @@ def deregister(worker_id: str):
     for client_id in set(task['client_id'] for task in realloc):
       for task in clients[client_id]:
         try:
-          workers[task['worker_id']]['pending_tasks'].remove(task)
-        except (KeyError, ValueError):
+          if task['cancel']:
+            continue  # already cancelled
+          elif task in workers[task['worker_id']]['pending_tasks']:
+            workers[task['worker_id']]['pending_tasks'].remove(task)
+          elif task in workers[task['worker_id']]['active_tasks']:
+            workers[task['worker_id']]['active_tasks'].remove(task)
+            task['cancel'] = True
+            workers[task['worker_id']]['pending_tasks'].append(task)
+        except KeyError:
           pass
       clients[client_id] = []
 
@@ -222,12 +229,11 @@ def deregister(worker_id: str):
       {task['task_id_old']: task['task_id'] for task in realloc}
     for client in clients.values():
       for task in client:
-        contacts_changed: bool = False
         for i, contact in enumerate(task['contacts']):
           if contact in realloc_map:
             task['contacts'][i] = realloc_map[contact]
-            contacts_changed = True
-        if contacts_changed and task in workers[task['worker_id']]['active_tasks']:
+            task['update'] = True
+        if task['update'] and task in workers[task['worker_id']]['active_tasks']:
           workers[task['worker_id']]['active_tasks'].remove(task)
           workers[task['worker_id']]['pending_tasks'].append(task)
 

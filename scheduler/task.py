@@ -20,6 +20,8 @@ class Task(dict):
     worker_id (str): Assigned worker's ID.
     program (str): JavaScript program for this task.
     contacts (List[str]): ID's for this task's contacts.
+    update (bool): Whether this task needs to be updated on the worker.
+    cancel (bool): Whether this task needs to be cancelled on the worker.
   """
   def __init__(self, client_id: str, vertex_id: int, worker_id: str,
                program: str, contacts: List[str]):
@@ -30,6 +32,8 @@ class Task(dict):
     self['worker_id'] = worker_id
     self['program'] = program
     self['contacts'] = contacts
+    self['update'] = False
+    self['cancel'] = False
 
 
 class Worker(dict):
@@ -83,6 +87,9 @@ class Worker(dict):
     # Create list of new tasks.
     n_send: int = self['n_cores'] - len(self['active_tasks'])
     send: List[Task] = self['pending_tasks'][:n_send]
+    send_copy: List[Task] = [task.copy() for task in send]
+    for task in send:
+      task['update'] = False
 
     # Update fields.
     self['active_tasks'] += send
@@ -92,4 +99,4 @@ class Worker(dict):
     if 'immortal' not in self['worker_id']:
       self.timer.start()
     self.heartbeat_lock.release()
-    return send
+    return send_copy

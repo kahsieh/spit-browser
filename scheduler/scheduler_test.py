@@ -62,22 +62,26 @@ class SchedulerTest(unittest.TestCase):
     }))
     self.assertEqual(json.loads(res.data), {
       "new_tasks": [{
+          "cancel": False,
           "client_id": "client1",
           "contacts": [
             "client1~1~worker0"
           ],
           "program": "program0",
           "task_id": "client1~0~worker0",
+          "update": False,
           "vertex_id": 0,
           "worker_id": "worker0"
         },
         {
+          "cancel": False,
           "client_id": "client1",
           "contacts": [
             "client1~2~worker1"
           ],
           "program": "program1",
           "task_id": "client1~1~worker0",
+          "update": False,
           "vertex_id": 1,
           "worker_id": "worker0"
         }
@@ -90,10 +94,12 @@ class SchedulerTest(unittest.TestCase):
     }))
     self.assertEqual(json.loads(res.data), {
       "new_tasks": [{
+        "cancel": False,
         "client_id": "client1",
         "contacts": [],
         "program": "program2",
         "task_id": "client1~2~worker1",
+        "update": False,
         "vertex_id": 2,
         "worker_id": "worker1"
       }]
