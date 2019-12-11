@@ -5,7 +5,7 @@ const API_KEY = 'lwjd5qra8257b9';
 const TASK_SCRIPT = "program/";
 const BATCH_DELAY_MS = 1000;
 const HEARTBEAT_INTERVAL_MS = 5000;
-const NUM_CORES = window.navigator.hardwareConcurrency;
+const NUM_CORES = 1;
 
 // Message Queues
 var inQueue = {}
