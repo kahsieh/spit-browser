@@ -21,8 +21,8 @@ from flask_cors import CORS
 
 app: Flask = Flask(__name__)
 CORS(app)
-IP = '127.0.0.1'
-PORT = 8888
+IP = '131.179.7.201'
+PORT = 5000
 
 @app.route('/')
 def root() -> Response:
@@ -57,28 +57,56 @@ def create_payload(graph_file, folder):
                                      'contacts':[int(i) for i in items[1:]]})
         payload['client_id'] = IP + ':' + str(PORT)
   return payload
+'''
+@app.before_first_request
+def before_first_request_func():
+    print('first startup')
+    #Parsing CL arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--folder", type=str, help="Directory of .js files", default = 'test')
+    #parser.add_argument("--workers", type=int, help="number of workers needed")
+    parser.add_argument("--graph", type=str, help="graph_file",\
+                                  default='graph_file.txt')
+    parser.add_argument("--scheduler_url", type=str, help="scheduler address",\
+                                        default="http://131.179.8.99:5000/allocate")
+    FLAGS = parser.parse_args()
+    folder = FLAGS.folder
+    #num_workers = FLAGS.workers
+    graph_file = FLAGS.graph
+    scheduler_url = FLAGS.scheduler_url
 
-if __name__ == '__main__':
-  #Parsing CL arguments
-  parser = argparse.ArgumentParser()
-  parser.add_argument("--folder", type=str, help="Directory of .js files", default = 'test')
-  #parser.add_argument("--workers", type=int, help="number of workers needed")
-  parser.add_argument("--graph", type=str, help="graph_file",\
-                                default='graph_file.txt')
-  parser.add_argument("--scheduler_url", type=str, help="scheduler address",\
-                                      default="http://127.0.0.1:5000/allocate")
-  FLAGS = parser.parse_args()
-  folder = FLAGS.folder
-  #num_workers = FLAGS.workers
-  graph_file = FLAGS.graph
-  scheduler_url = FLAGS.scheduler_url
+    #making request payload
+    payload = create_payload(graph_file, folder)
+    print(payload)
+    response = requests.post(scheduler_url, json=payload)
+    if response.status_code != 200:
+      print('Failure Error Code: {}'.format(response.status_code))
+      print('Exiting please try again')
+      exit(1)
+'''
 
-  #making request payload
-  payload = create_payload(graph_file, folder)
-  print(payload)
-  response = requests.post(scheduler_url, json=payload)
-  if response.status_code != 200:
-    print('Failure Error Code: {}'.format(response.status_code))
-    print('Exiting please try again')
-    exit(1)
-  app.run(host=IP, port= PORT)
+#Parsing CL arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("--folder", type=str, help="Directory of .js files", default = 'test')
+#parser.add_argument("--workers", type=int, help="number of workers needed")
+parser.add_argument("--graph", type=str, help="graph_file",\
+                              default='graph_file.txt')
+parser.add_argument("--scheduler_url", type=str, help="scheduler address",\
+                                    default="http://131.179.8.99:5000/allocate")
+parser.add_argument("--host", type=str)
+parser.add_argument("run", type=str)
+FLAGS = parser.parse_args()
+folder = FLAGS.folder
+#num_workers = FLAGS.workers
+graph_file = FLAGS.graph
+scheduler_url = FLAGS.scheduler_url
+
+#making request payload
+payload = create_payload(graph_file, folder)
+print(payload)
+response = requests.post(scheduler_url, json=payload)
+if response.status_code != 200:
+  print('Failure Error Code: {}'.format(response.status_code))
+  print('Exiting please try again')
+  exit(1)
+#app.run(host=IP, port= PORT)
