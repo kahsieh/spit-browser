@@ -1,2 +1,2 @@
 a.js 1
-b.js
+b.js 0

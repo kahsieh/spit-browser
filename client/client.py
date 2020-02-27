@@ -29,7 +29,11 @@ def create_payload(graph_file, folder):
       items = line.split()
       file_path = os.path.join(folder, items[0])
       with open(file_path, 'r') as js_file:
-        payload['new_tasks'].append({'program': js_file.read(), 'contacts':[int(i) for i in items[1:]]})
+        program_string = js_file.read()
+        program_string_mod = 'const PORT = {}\n'.format(PORT) + \
+                             'const IP = {}\n'.format(IP) + program_string
+        payload['new_tasks'].append({'program': program_string_mod, \
+                                     'contacts':[int(i) for i in items[1:]]})
         payload['client_id'] = IP + ':' + str(PORT)
   return payload
 
@@ -73,7 +77,7 @@ async def stream_data(writer):
         if buff == '':
           break
         print(f'Send: {buff!r}')
-        writer.write(buff.encode())
+        await writer.write(buff.encode())
         await writer.drain()
   except KeyboardInterrupt:
     print("Close the connection stop streaming")
@@ -98,8 +102,10 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument("--folder", type=str, help="Directory of .js files", default = 'test')
   #parser.add_argument("--workers", type=int, help="number of workers needed")
-  parser.add_argument("--graph", type=str, help="graph_file", default='graph_file.txt')
-  parser.add_argument("--scheduler_url", type=str, help="scheduler address", default="http://127.0.0.1:5000/allocate")
+  parser.add_argument("--graph", type=str, help="graph_file",\
+                                default='graph_file.txt')
+  parser.add_argument("--scheduler_url", type=str, help="scheduler address",\
+                                      default="http://127.0.0.1:5000/allocate")
   FLAGS = parser.parse_args()
   folder = FLAGS.folder
   #num_workers = FLAGS.workers
