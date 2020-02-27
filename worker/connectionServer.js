@@ -14,10 +14,8 @@ var wsServer = new webSocketServer({
 wsServer.on('request', function(request) {
   console.log((new Date()) + ' Connection from origin '
       + request.origin + '.');
-
   var connection = request.accept(null, request.origin);
   connection.on('message', function(message) {
-    console.log(message);
     message = JSON.parse(message.utf8Data);
     switch(message.type) {
       case "register":

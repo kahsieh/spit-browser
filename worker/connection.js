@@ -31,21 +31,17 @@ class Connection {
 
   connect(peerId) {
     if ((peerId in this.pending) || (peerId in this.peers)) {
-      console.log("already connected");
       return;
     }
-    console.log("connecting");
     const newPeer = new SimplePeer({
       initiator: peerId > this.myId,
       trickle: true
     });
-    console.log(peerId < this.myId);
     newPeer.on('error', err => {
       console.log('error', err);
       delete this.pending[peerId];
     });
     newPeer.on('signal', data => {
-      console.log("signl")
       this.server.send(JSON.stringify({
         "dest": peerId,
         "type": "signal",
@@ -54,7 +50,6 @@ class Connection {
       }));
     });
     newPeer.on('connect', () => {
-      console.log("connect")
         this.peers[peerId] = newPeer;
     })
     newPeer.on('data', data => {

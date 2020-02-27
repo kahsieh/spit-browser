@@ -76,7 +76,6 @@ function sendHeartbeat() {
     "/heartbeat"
   ).then(function(data){
     data.json().then(json => {
-      console.log(json);
       newTasks = json["new_tasks"]
       for (const task of newTasks) {
         registerTask(task['task_id'], task['contacts'])
