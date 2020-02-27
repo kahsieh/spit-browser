@@ -9,6 +9,7 @@ from flask_cors import CORS
 from threading import Lock
 from typing import Any, Dict, List, Set, Tuple
 from task import *
+import uuid
 
 app: Flask = Flask(__name__)
 CORS(app)
@@ -80,12 +81,13 @@ def register() -> Response:
   """
   req: Dict[str, Any] = request.get_json(force=True)
   try:
-    worker_id, n_cores = req['worker_id'], req['n_cores']
+    worker_id, n_cores = uuid.uuid1().hex, req['n_cores']
     if worker_id in workers:
       abort(403)
     workers[worker_id] = Worker(worker_id, n_cores, deregister)
     return jsonify({
       'success': True,
+      'worker_id': worker_id,
     })
   except KeyError:
     abort(404)
