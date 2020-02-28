@@ -58,6 +58,8 @@ function setupWorker() {
       delete outPending[data['ack']];
       return;
     }
+    // for (id in data['messages'])
+    //   console.log("Recieved: " + data['messages'][id])
     recieveMessages(data['messages']);
     connection.send(data['id'], {'ack': data['tag']});
   });
@@ -111,6 +113,13 @@ function registerTask(taskId, contacts) {
   } else {
     task = tasks[taskId]
   }
+
+  // Add/update outgoing addresses
+  for (const outTask of contacts) {
+    outTaskWorkerId = outTask.split("~")[2]
+    addresses[getWorkerIndependentTaskUID(outTask)] = outTaskWorkerId;
+  }
+
   // Add outgoing messages to queue
   task.onmessage = function(e) {
     for (const outTask of contacts) {
@@ -155,7 +164,7 @@ function sendMessages() {
   for (const workerId in outQueue) {
     if (Object.getOwnPropertyNames(outQueue[workerId]).length > 0) {
       connection.connect(workerId)
-      var timestamp = new Date().getUTCMilliseconds();
+      var timestamp = new Date().getTime();
       connection.send(workerId, {'messages': outQueue[workerId], 'tag': timestamp, 'id': my_id});
       addToPending(outQueue[workerId], workerId, timestamp);
       outQueue[workerId] = {}
@@ -163,8 +172,34 @@ function sendMessages() {
   }
 }
 
+function getWorkerIndependentTaskUID(taskId) {
+  return taskId.substring(0,taskId.lastIndexOf("~"));
+}
+
 function addToPending(messages, workerId, tag) {
   var interval = setInterval(function() {
+    // Check that tasks have not been assigned to new workers
+    for (const pendingTask in messages) {
+      taskId = getWorkerIndependentTaskUID(pendingTask);
+      newWorkerId = addresses[taskId];
+      if (newWorkerId !== workerId) {
+        outTask = taskId + "~" + newWorkerId;
+        if (my_id === newWorkerId) {
+          inQueue[outTask] = inQueue[outTask].concat(messages[pendingTask])
+        } else {
+          if (!outQueue[newWorkerId].hasOwnProperty(outTask)) {
+            outQueue[newWorkerId][outTask] = []
+          }
+          outQueue[newWorkerId][outTask] = outQueue[newWorkerId][outTask].concat(messages[pendingTask])
+        }
+        delete messages[pendingTask];
+      }
+    }
+    if (Object.getOwnPropertyNames(messages).length <= 0) {
+      clearInterval(outPending[tag]);
+      delete outPending[tag];
+      return;
+    }
     connection.send(workerId, {'messages': messages, 'tag': tag, 'id': my_id});
   }, RESEND_DELAY_MS);
   outPending[tag] = interval;
