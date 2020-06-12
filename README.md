@@ -1,12 +1,11 @@
 # SPIT-Browser
 
-Stream Processing in the Browser
+Stream Processing in the Browser.
 
-Written by:
+**This project is no longer maintained as of March 2020.**
 
-- Kevin Hsieh (kevin.hsieh@ucla.edu)
-- Christian Warloe (cwarloe@ucla.edu)
-- Willie Wu (williewu@ucla.edu)
+Copyright © 2019–2020 Kevin Hsieh, Christian Warloe, and Willie Wu. All Rights
+Reserved.
 
 ## Scheduler
 
